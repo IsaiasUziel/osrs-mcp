@@ -1,5 +1,5 @@
 import { z } from 'zod/v3';
-import { SKILLS } from './hiscores.js';
+import { getSkillProgress, SKILLS, type PlayerStats } from './hiscores.js';
 
 const API = 'https://oldschool.runescape.wiki/api.php';
 const MAX_RESPONSE_BYTES = 1_048_576;
@@ -178,4 +178,23 @@ export async function getQuestInfo(title: string, fetcher: typeof fetch = fetch)
     throw new Error(error.success && error.data.code === 'missingtitle' ? `Quest page not found: ${normalized}` : 'OSRS Wiki API error');
   }
   return parseQuestPage(data);
+}
+
+const GAP_STATUS = { MET: 'met', BELOW: 'below_base_level', UNKNOWN: 'unknown' } as const;
+
+export function getQuestSkillGaps(quest: QuestInfo, stats: PlayerStats) {
+  const skills = quest.skillRequirements.map(requirement => {
+    const current = stats.skills.find(skill => skill.name === requirement.skill);
+    return {
+      ...requirement, currentLevel: current?.level ?? null,
+      xpRemaining: current ? getSkillProgress(stats, requirement.skill, requirement.level).xpRemaining : null,
+      status: !current ? GAP_STATUS.UNKNOWN : current.level >= requirement.level ? GAP_STATUS.MET : GAP_STATUS.BELOW
+    };
+  });
+  return {
+    rsn: stats.rsn, quest, statsSource: stats.source, statsFetchedAt: stats.fetchedAt,
+    eligibility: 'unknown' as const, questCompletion: 'unknown' as const, skills,
+    uncheckedConditions: ['Quest completion and prerequisite quests', 'Quest points', 'Inventory and item acquisition', 'Membership and access', 'Boosts, combat capability and other manual conditions'],
+    warnings: ['These are base-level comparisons, not a determination of quest availability. Missing base levels may be boostable.']
+  };
 }

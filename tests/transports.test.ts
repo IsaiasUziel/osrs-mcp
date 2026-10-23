@@ -7,7 +7,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 const cwd = fileURLToPath(new URL('..', import.meta.url));
 const preload = ['--preload', './tests/fixtures/hiscores-preload.ts'];
-const toolNames = ['get_player_stats', 'get_skill_progress', 'get_quest_info'];
+const toolNames = ['get_player_stats', 'get_skill_progress', 'get_quest_info', 'get_quest_skill_gaps'];
 
 async function checkTools(client: Client) {
   const { tools } = await client.listTools();
@@ -44,15 +44,29 @@ async function checkTools(client: Client) {
   for (const rsn of ['Missing', 'Unavailable', 'invalid!']) {
     expect((await client.callTool({ name: 'get_player_stats', arguments: { rsn } })).isError).toBe(true);
   }
-  const info = await client.callTool({ name: 'get_quest_info', arguments: { quest: 'Synthetic Quest' } });
-  expect(info.isError).not.toBe(true);
-  const infoContent = info.content as { type: 'text'; text: string }[];
-  expect(JSON.parse(infoContent[0]!.text)).toMatchObject({ title: 'Synthetic Quest', rewardedQuestPoints: 3 });
-  expect((await client.callTool({ name: 'get_quest_info', arguments: { quest: 'Missing' } })).isError).toBe(true);
-  const grouped = await client.callTool({ name: 'get_quest_info', arguments: { quest: 'Alternative Quest' } });
-  expect(grouped.isError).not.toBe(true);
-  const groupedContent = grouped.content as { type: 'text'; text: string }[];
-  expect(JSON.parse(groupedContent[0]!.text).skillRequirements).toEqual([]);
+  for (const name of ['get_quest_info', 'get_quest_skill_gaps']) {
+    const result = await client.callTool({ name, arguments: { quest: 'Synthetic Quest' } });
+    expect(result.isError).not.toBe(true);
+    const content = result.content as { type: 'text'; text: string }[];
+    const value = JSON.parse(content[0]!.text);
+    if (name === 'get_quest_info') {
+      expect(value.title).toBe('Synthetic Quest');
+      expect(value.rewardedQuestPoints).toBe(3);
+    } else {
+      expect(value.rsn).toBe('Uzgorak');
+      expect(value.eligibility).toBe('unknown');
+      expect(value.skills[0].status).toBe('below_base_level');
+      const explicit = await client.callTool({ name, arguments: { quest: 'Synthetic Quest', rsn: 'Other Player' } });
+      const explicitContent = explicit.content as { type: 'text'; text: string }[];
+      expect(JSON.parse(explicitContent[0]!.text).rsn).toBe('Other Player');
+    }
+    expect((await client.callTool({ name, arguments: { quest: 'Missing' } })).isError).toBe(true);
+    const grouped = await client.callTool({ name, arguments: { quest: 'Alternative Quest' } });
+    expect(grouped.isError).not.toBe(true);
+    const groupedContent = grouped.content as { type: 'text'; text: string }[];
+    const groupedValue = JSON.parse(groupedContent[0]!.text);
+    expect(name === 'get_quest_info' ? groupedValue.skillRequirements : groupedValue.skills).toEqual([]);
+  }
 }
 
 describe('stdio MCP', () => {

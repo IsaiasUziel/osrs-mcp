@@ -34,14 +34,15 @@ Requests without `Origin` are supported for non-browser MCP clients. When presen
 - `get_player_stats({ rsn?: string })`: live skills, XP and ranks from official Jagex Hiscores.
 - `get_skill_progress({ rsn?: string, skill: string, targetLevel: number })`: XP needed to reach a level from 1–99.
 - `get_quest_info({ quest: string })`: Wiki quest requirements, recommendations, required items, rewards and available walkthrough context.
+- `get_quest_skill_gaps({ quest: string, rsn?: string })`: compare explicitly parsed quest skill requirements with Hiscores base levels and XP.
 
 The RSN defaults to `Uzgorak`. Each result includes source and fetch timestamp. Hiscores do not reveal completed quests, bank contents or Slayer assignments.
 
 ## Quest guidance
 
-For example, call `get_quest_info({ "quest": "Lost City" })` for preparation context. Quest lookups use anonymous, on-demand GET requests to the public Wiki. They never install plugins, inspect RuneLite, read game memory or packets, request game credentials, or control gameplay. WikiSync is not queried. No claim of zero ban risk is made.
+For example, call `get_quest_info({ "quest": "Lost City" })` for preparation context, then `get_quest_skill_gaps({ "quest": "Lost City" })` for base-level comparisons. The tools use anonymous, on-demand GET requests to the public Wiki and existing official Hiscores endpoint. They never install plugins, inspect RuneLite, read game memory or packets, request game credentials, or control gameplay. WikiSync is not queried. No claim of zero ban risk is made.
 
-Quest text is returned as **wikitext reference data**, with canonical and revision URLs, fetch time, contributor attribution and a content-license link. Only unambiguous standalone `SCP` skill requirements are interpreted. Alternatives, conditional or unsupported markup, prerequisite quests, quest points, boosts, access and inventory remain unverified. Recommended skills are never treated as requirements. Quest information does not establish your completion state or eligibility. Personal skill-gap comparison is a separate follow-up.
+Quest text is returned as **wikitext reference data**, with canonical and revision URLs, fetch time, contributor attribution and a content-license link. Only unambiguous standalone `SCP` skill requirements are interpreted. Alternatives, conditional or unsupported markup, prerequisite quests, quest points, boosts, access and inventory remain unverified. Recommended skills are never treated as requirements. `met` means only that a base skill level meets a parsed threshold; **quest eligibility and completion always remain `unknown`**. A missing base level may still be boostable.
 
 Leading prose, group labels and alternative/conditional cues disable automatic skill extraction for that requirement group. This deliberately favors manual review over potentially misleading skill comparisons.
 
@@ -79,7 +80,7 @@ Wiki content has separate licensing from this project's MIT code; see [third-par
 
 Transport tests start real stdio and loopback HTTP MCP servers with fixture-backed Hiscores responses. They require no Jagex connection and cover tool discovery, default and explicit RSNs, XP progress, tool errors, authentication, routing, and origin validation.
 
-Quest tests use synthetic Wiki responses, not copied Wiki pages, and cover conservative parsing, unknown conditions, provenance, bounded responses and failures. Both transports exercise quest context while preserving the original tools' schemas and validation messages.
+Quest tests use synthetic Wiki responses, not copied Wiki pages, and cover conservative parsing, unknown conditions, provenance, bounded responses and failures. Both transports exercise the new quest tools while preserving the original tools' schemas and validation messages.
 
 ## Contributing
 
