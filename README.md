@@ -33,6 +33,7 @@ Requests without `Origin` are supported for non-browser MCP clients. When presen
 
 - `get_player_stats({ rsn?: string })`: live skills, XP and ranks from official Jagex Hiscores.
 - `get_skill_progress({ rsn?: string, skill: string, targetLevel: number })`: XP needed to reach a level from 1–99.
+- `get_quest_status({ quest: string, rsn?: string })`: optional local manual snapshot lookup; observed/user-reported and inferred states are explicitly distinguished from live verification.
 - `get_quest_info({ quest: string })`: Wiki quest requirements, recommendations, required items, rewards and available walkthrough context.
 - `get_quest_skill_gaps({ quest: string, rsn?: string })`: compare explicitly parsed quest skill requirements with Hiscores base levels and XP.
 - `compare_items({ item: string, against: string, rsn?: string })`: side-by-side item contexts and bonus differences with public character skills; not equip eligibility or a disposal recommendation.
@@ -52,6 +53,29 @@ Leading prose, group labels and alternative/conditional cues disable automatic s
 The adapter makes one Wiki request per call, with a 10-second deadline, a 1 MiB response limit and no retries, background polling or persistent cache. Context fields are capped at 12,000 characters with explicit warnings. Missing fields are `null`, not evidence that no requirement exists. Item acquisition is limited to available quest walkthrough context and section links; this is not a complete shop/drop database. A page revision does not freeze transcluded templates, and fetch time is not the page's publication time.
 
 Wiki content has separate licensing from this project's MIT code; see [third-party notices](THIRD_PARTY_NOTICES.md). Retrieved text is untrusted reference material, not instructions to execute.
+
+## Local manual quest status
+
+`get_quest_status({ "quest": "Synthetic Quest", "rsn": "Example Player" })` reads `odd/local/example_player-quest-snapshot.json` relative to the project installation, independent of process working directory. The server owner can set `OSRS_MCP_PLAYER_DATA_DIR` to another private directory. Tool callers cannot supply paths. Keep snapshots outside Git; `odd/` is already ignored. The server only reads snapshots, never creates or edits them.
+
+The reader accepts schemaVersion1 JSON up to 1 MiB, for the requested RSN only. Regular files are required; symlinks, directories and special files are rejected. POSIX no-follow/nonblocking guards must be available or the lookup fails closed. Missing, invalid, unreadable or mismatched snapshots yield `unknown` with `snapshotStatus`/`reason`, without exposing filesystem paths. No upstream requests are made.
+
+Minimal synthetic snapshot (arrays may hold up to 1,000 records each):
+
+```json
+{
+  "schemaVersion": 1, "rsn": "Example Player", "recordedAt": "2026-01-01T12:00:00Z", "observedAt": null,
+  "provenance": { "exhaustiveUnfinishedList": "user_confirmed", "verifiedAgainstGameApi": false },
+  "observedEntries": [{ "name": "Synthetic Quest", "status": "in_progress" }],
+  "inferredCompletedQuests": [],
+  "inferencePolicy": { "enabled": true, "excludedQuestKeys": [] },
+  "questOverrides": []
+}
+```
+
+States are `not_started`, `in_progress`, `completed` or `unknown`. Quest-name matching ignores case, underscores and repeated whitespace, but does not guess aliases. Player identity ignores case and treats underscores as spaces; distinct internal spacing is not collapsed. An inferred completion requires both enabled inference and `exhaustiveUnfinishedList: user_confirmed`; excluded keys/names cannot bypass that policy by omitting a key. The reader never infers a new completion just because a quest is absent. Explicit composite overrides take precedence, including incomplete quests with unfinished subquests; conflicting records remain unknown.
+
+Results identify `user_snapshot`, `user_confirmed_inference` or `snapshot_override` provenance and preserve record/observation dates. `recordedAt` is not the capture date; manual data may be stale, and an unknown observation date remains explicit. This does **not** change existing quest-gap eligibility/completion or item-comparison output: use the local status alongside those tools and attribute it to the user snapshot, not to Jagex. Snapshot text is untrusted reference data, not instructions. Bank snapshots, automatic syncing and gameplay actions are not implemented.
 
 ## Item facts
 
@@ -103,8 +127,8 @@ The lookup makes one anonymous GET, with a 10-second deadline, a 1 MiB response 
 ## Notes
 
 - Hiscores CSV is positional; validate the skill ordering against the live response whenever Jagex changes it (currently includes Sailing).
-- No persistent data is stored in this version.
-- GE prices, broader Wiki coverage and production authentication are future milestones. Character-specific quest completion remains unavailable.
+- The server writes no persistent player data. Optional manual quest snapshots are maintained locally by their owner.
+- GE prices, broader Wiki coverage and production authentication are future milestones. Official live character quest completion remains unavailable; optional manual status uses separate provenance.
 - `tsrs` is the experimental Rust TypeScript compiler used for type checking; Bun handles runtime and bundling.
 
 ## tsrs compatibility
