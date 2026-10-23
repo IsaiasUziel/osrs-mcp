@@ -7,7 +7,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 const cwd = fileURLToPath(new URL('..', import.meta.url));
 const preload = ['--preload', './tests/fixtures/hiscores-preload.ts'];
-const toolNames = ['get_player_stats', 'get_skill_progress', 'get_quest_info', 'get_quest_skill_gaps'];
+const toolNames = ['get_player_stats', 'get_skill_progress', 'get_quest_info', 'get_quest_skill_gaps', 'get_player_profile'];
 
 async function checkTools(client: Client) {
   const { tools } = await client.listTools();
@@ -66,6 +66,12 @@ async function checkTools(client: Client) {
     const groupedContent = grouped.content as { type: 'text'; text: string }[];
     const groupedValue = JSON.parse(groupedContent[0]!.text);
     expect(name === 'get_quest_info' ? groupedValue.skillRequirements : groupedValue.skills).toEqual([]);
+  }
+  for (const [rsn, accountType] of [[undefined, 'regular'], ['Other Player', 'ironman'], ['Missing', 'unknown'], ['Stale', 'unknown']] as const) {
+    const profile = await client.callTool({ name: 'get_player_profile', arguments: rsn ? { rsn } : {} });
+    expect(profile.isError).not.toBe(true);
+    const content = profile.content as { type: 'text'; text: string }[];
+    expect(JSON.parse(content[0]!.text)).toMatchObject({ rsn: rsn ?? 'Uzgorak', accountType, confirmationRequired: accountType === 'unknown' });
   }
 }
 

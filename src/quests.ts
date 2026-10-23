@@ -1,8 +1,8 @@
 import { z } from 'zod/v3';
 import { getSkillProgress, SKILLS, type PlayerStats } from './hiscores.js';
+import { readBoundedText } from './upstream.js';
 
 const API = 'https://oldschool.runescape.wiki/api.php';
-const MAX_RESPONSE_BYTES = 1_048_576;
 const MAX_CONTEXT_CHARS = 12_000;
 const pageSchema = z.object({ parse: z.object({
   title: z.string().min(1).max(200), revid: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -144,22 +144,6 @@ export function parseQuestPage(input: unknown, fetchedAt = new Date().toISOStrin
   };
 }
 
-async function readBounded(response: Response): Promise<string> {
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('Invalid OSRS Wiki response body');
-  let size = 0, text = '';
-  const decoder = new TextDecoder();
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) return text + decoder.decode();
-      size += value.byteLength;
-      if (size > MAX_RESPONSE_BYTES) { await reader.cancel(); throw new Error('OSRS Wiki response too large'); }
-      text += decoder.decode(value, { stream: true });
-    }
-  } finally { reader.releaseLock(); }
-}
-
 export async function getQuestInfo(title: string, fetcher: typeof fetch = fetch): Promise<QuestInfo> {
   const normalized = title.trim();
   if (!normalized || normalized.length > 200 || /[\x00-\x1f]/.test(normalized)) throw new Error('Invalid quest title');
@@ -171,7 +155,7 @@ export async function getQuestInfo(title: string, fetcher: typeof fetch = fetch)
   });
   if (!response.ok) { await response.body?.cancel(); throw new Error(`OSRS Wiki HTTP ${response.status}`); }
   let data: unknown;
-  try { data = JSON.parse(await readBounded(response)); }
+  try { data = JSON.parse(await readBoundedText(response, 'OSRS Wiki')); }
   catch (error) { if (error instanceof SyntaxError) throw new Error('Invalid OSRS Wiki JSON'); throw error; }
   if (typeof data === 'object' && data !== null && 'error' in data) {
     const error = z.object({ code: z.string() }).safeParse(data.error);

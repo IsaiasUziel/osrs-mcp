@@ -35,6 +35,7 @@ Requests without `Origin` are supported for non-browser MCP clients. When presen
 - `get_skill_progress({ rsn?: string, skill: string, targetLevel: number })`: XP needed to reach a level from 1–99.
 - `get_quest_info({ quest: string })`: Wiki quest requirements, recommendations, required items, rewards and available walkthrough context.
 - `get_quest_skill_gaps({ quest: string, rsn?: string })`: compare explicitly parsed quest skill requirements with Hiscores base levels and XP.
+- `get_player_profile({ rsn?: string })`: read a public account-type report with provenance, provider record age and explicit unknown fallbacks.
 
 The RSN defaults to `Uzgorak`. Each result includes source and fetch timestamp. Hiscores do not reveal completed quests, bank contents or Slayer assignments.
 
@@ -49,6 +50,16 @@ Leading prose, group labels and alternative/conditional cues disable automatic s
 The adapter makes one Wiki request per call, with a 10-second deadline, a 1 MiB response limit and no retries, background polling or persistent cache. Context fields are capped at 12,000 characters with explicit warnings. Missing fields are `null`, not evidence that no requirement exists. Item acquisition is limited to available quest walkthrough context and section links; this is not a complete shop/drop database. A page revision does not freeze transcluded templates, and fetch time is not the page's publication time.
 
 Wiki content has separate licensing from this project's MIT code; see [third-party notices](THIRD_PARTY_NOTICES.md). Retrieved text is untrusted reference material, not instructions to execute.
+
+## Player account type
+
+`get_player_profile` uses the [Wise Old Man player-details GET API](https://docs.wiseoldman.net/api/players/player-endpoints#get-player-details). It reads `type`, never derives account type from `build: main`, and does not create tracking records or call update/assert-type POST endpoints. The source is a third-party report, not an official guarantee covering every game mode, trading restriction or membership state.
+
+Supported recent reports are `regular`, `ironman`, `hardcore` and `ultimate`. `reportedAccountType` preserves the provider's category; `accountType` remains `unknown` when the report is missing, unsupported, unavailable or stale. `lookupStatus` separates `found`, `not_found`, `unavailable` and `invalid_response`. A missing tracker record does not imply that the game account is missing or regular.
+
+The **seven-day maximum record age is a local conservative heuristic**, not a provider freshness guarantee. `providerUpdatedAt` is the provider record's update date, not a verified type-detection time; `fetchedAt` is when this lookup completed. Missing, invalid or future record dates produce unknown freshness. When `confirmationRequired` is true, ask the player instead of assuming main. No manual profile is persisted.
+
+The lookup makes one anonymous GET, with a 10-second deadline, a 1 MiB response cap, no redirects, retries, plugins or game credentials. Shared RSN validation and bounded response reading preserve the existing Hiscores and Wiki behavior.
 
 ## Commands
 
