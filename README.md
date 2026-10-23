@@ -35,6 +35,7 @@ Requests without `Origin` are supported for non-browser MCP clients. When presen
 - `get_skill_progress({ rsn?: string, skill: string, targetLevel: number })`: XP needed to reach a level from 1–99.
 - `get_quest_info({ quest: string })`: Wiki quest requirements, recommendations, required items, rewards and available walkthrough context.
 - `get_quest_skill_gaps({ quest: string, rsn?: string })`: compare explicitly parsed quest skill requirements with Hiscores base levels and XP.
+- `compare_items({ item: string, against: string, rsn?: string })`: side-by-side item contexts and bonus differences with public character skills; not equip eligibility or a disposal recommendation.
 - `get_item_info({ item: string })`: Wiki item properties, literal equipment bonuses and utility/requirements context, with revision attribution.
 - `get_player_profile({ rsn?: string })`: read a public account-type report with provenance, provider record age and explicit unknown fallbacks.
 
@@ -59,6 +60,18 @@ Call `get_item_info({ "item": "Kandarin headgear 1" })` to inspect utility and r
 Only single-version `Infobox Item` pages and literal `Infobox Bonuses` numbers are supported. Missing/unsupported bonuses and slots remain `null`; versioned or ambiguous item pages are rejected rather than blended. `properties` contains raw wikitext: for example, `quest: No` describes the Wiki's quest-item classification, **not** whether quests are required to equip or reclaim it. Equipment requirements, membership, diary/quest state, ownership, reclaim access and market prices are not automatically verified.
 
 Item lookups use one anonymous on-demand Wiki GET, no redirects/retries, a 10-second deadline and 1 MiB response cap. Context is capped at 12,000 characters with an explicit truncation flag; selected properties are capped at 1,000 characters. Transcluded content is not expanded or revision-pinned. Attribution and the separate Wiki-content license accompany every result; see [third-party notices](THIRD_PARTY_NOTICES.md). No client integration, bank access or gameplay actions are added.
+
+### Compare items for a character
+
+```json
+{ "item": "Kandarin headgear 1", "against": "Helm of Neitiznot", "rsn": "Uzgorak" }
+```
+
+Pass this to `compare_items`. The result preserves both items' context, source revisions and fetch dates alongside public Hiscores skills. `differenceDirection` is `against_minus_item`: positive values mean a higher literal bonus on `against`, **not** that it is universally better. Differences are `null` for missing/unsupported bonuses or different/unknown equipment slots. No DPS or set-effect simulation is performed.
+
+Requirements are not automatically parsed from prose. Even if skills appear sufficient, quest/diary completion, membership and access remain unverified. `equipEligibility`, `ownership`, `accountType` and `disposalRecommendation` remain `unknown`; item names supplied by a user do not prove possession. Utility context must be reviewed before suggesting that a combat upgrade replaces a utility item. No bank contents, GE prices or sell/drop actions are accessed.
+
+A comparison validates both titles and RSN first, then makes two item GETs and one existing Hiscores lookup sequentially. It has no persistent cache, retries or background polling. A failed source returns an error, not an invented personalized answer. Reusing the Hiscores adapter preserves its existing request/error semantics; item-specific response limits do not change that adapter.
 
 ## Player account type
 

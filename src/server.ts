@@ -4,6 +4,7 @@ import { getPlayerStats, getSkillProgress } from './hiscores.js';
 import { getQuestInfo, getQuestSkillGaps } from './quests.js';
 import { getPlayerProfile } from './player-profile.js';
 import { getItemInfo } from './items.js';
+import { getItemComparison } from './item-comparison.js';
 
 export function createServer() {
   const server = new McpServer({ name: 'osrs-mcp', version: '0.1.0' });
@@ -47,6 +48,13 @@ export function createServer() {
     inputSchema: { item: z.string().min(1).max(200) }, annotations: { readOnlyHint: true }
   }, async ({ item }) => {
     try { return { content: [{ type: 'text', text: JSON.stringify(await getItemInfo(item)) }] }; }
+    catch (error) { return { isError: true, content: [{ type: 'text', text: String(error) }] }; }
+  });
+  server.registerTool('compare_items', {
+    description: 'Compare two Wiki item contexts and literal bonuses alongside public character skills; does not rank overall usefulness or confirm equip eligibility, ownership or disposal',
+    inputSchema: { item: z.string().min(1).max(200), against: z.string().min(1).max(200), rsn: z.string().default('Uzgorak') }, annotations: { readOnlyHint: true }
+  }, async ({ item, against, rsn }) => {
+    try { return { content: [{ type: 'text', text: JSON.stringify(await getItemComparison(item, against, rsn)) }] }; }
     catch (error) { return { isError: true, content: [{ type: 'text', text: String(error) }] }; }
   });
   return server;

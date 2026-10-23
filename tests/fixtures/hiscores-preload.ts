@@ -15,6 +15,7 @@ globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init
   }
   if (url.origin === 'https://oldschool.runescape.wiki' && url.pathname === '/api.php') {
     if (init?.method !== 'GET' || url.searchParams.get('action') !== 'parse') throw new Error('Expected read-only Wiki parse request');
+    if (url.searchParams.get('page') === 'Synthetic combat helm') return Response.json(itemResponse('Synthetic combat helm', '+5'));
     if (url.searchParams.get('page') === 'Synthetic utility hood') return Response.json(itemResponse());
     if (url.searchParams.get('page') === 'Alternative Quest') return Response.json(alternativeQuestResponse);
     return Response.json(url.searchParams.get('page') === 'Missing' ? { error: { code: 'missingtitle' } } : questResponse);
