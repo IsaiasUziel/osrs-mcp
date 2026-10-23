@@ -35,6 +35,7 @@ Requests without `Origin` are supported for non-browser MCP clients. When presen
 - `get_skill_progress({ rsn?: string, skill: string, targetLevel: number })`: XP needed to reach a level from 1–99.
 - `get_quest_info({ quest: string })`: Wiki quest requirements, recommendations, required items, rewards and available walkthrough context.
 - `get_quest_skill_gaps({ quest: string, rsn?: string })`: compare explicitly parsed quest skill requirements with Hiscores base levels and XP.
+- `get_item_info({ item: string })`: Wiki item properties, literal equipment bonuses and utility/requirements context, with revision attribution.
 - `get_player_profile({ rsn?: string })`: read a public account-type report with provenance, provider record age and explicit unknown fallbacks.
 
 The RSN defaults to `Uzgorak`. Each result includes source and fetch timestamp. Hiscores do not reveal completed quests, bank contents or Slayer assignments.
@@ -50,6 +51,14 @@ Leading prose, group labels and alternative/conditional cues disable automatic s
 The adapter makes one Wiki request per call, with a 10-second deadline, a 1 MiB response limit and no retries, background polling or persistent cache. Context fields are capped at 12,000 characters with explicit warnings. Missing fields are `null`, not evidence that no requirement exists. Item acquisition is limited to available quest walkthrough context and section links; this is not a complete shop/drop database. A page revision does not freeze transcluded templates, and fetch time is not the page's publication time.
 
 Wiki content has separate licensing from this project's MIT code; see [third-party notices](THIRD_PARTY_NOTICES.md). Retrieved text is untrusted reference material, not instructions to execute.
+
+## Item facts
+
+Call `get_item_info({ "item": "Kandarin headgear 1" })` to inspect utility and requirement context alongside combat bonuses. `contextWikitext` preserves current prose and sections before historical/trivia suffixes; it is reference data, not executable instructions. Numeric bonuses alone never establish that an item is obsolete.
+
+Only single-version `Infobox Item` pages and literal `Infobox Bonuses` numbers are supported. Missing/unsupported bonuses and slots remain `null`; versioned or ambiguous item pages are rejected rather than blended. `properties` contains raw wikitext: for example, `quest: No` describes the Wiki's quest-item classification, **not** whether quests are required to equip or reclaim it. Equipment requirements, membership, diary/quest state, ownership, reclaim access and market prices are not automatically verified.
+
+Item lookups use one anonymous on-demand Wiki GET, no redirects/retries, a 10-second deadline and 1 MiB response cap. Context is capped at 12,000 characters with an explicit truncation flag; selected properties are capped at 1,000 characters. Transcluded content is not expanded or revision-pinned. Attribution and the separate Wiki-content license accompany every result; see [third-party notices](THIRD_PARTY_NOTICES.md). No client integration, bank access or gameplay actions are added.
 
 ## Player account type
 
@@ -82,7 +91,7 @@ The lookup makes one anonymous GET, with a 10-second deadline, a 1 MiB response 
 
 - Hiscores CSV is positional; validate the skill ordering against the live response whenever Jagex changes it (currently includes Sailing).
 - No persistent data is stored in this version.
-- GE prices, broader Wiki lookups and production authentication are future milestones. Character-specific quest completion remains unavailable.
+- GE prices, broader Wiki coverage and production authentication are future milestones. Character-specific quest completion remains unavailable.
 - `tsrs` is the experimental Rust TypeScript compiler used for type checking; Bun handles runtime and bundling.
 
 ## tsrs compatibility

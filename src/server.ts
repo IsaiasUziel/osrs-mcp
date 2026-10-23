@@ -3,6 +3,7 @@ import { z } from 'zod/v3';
 import { getPlayerStats, getSkillProgress } from './hiscores.js';
 import { getQuestInfo, getQuestSkillGaps } from './quests.js';
 import { getPlayerProfile } from './player-profile.js';
+import { getItemInfo } from './items.js';
 
 export function createServer() {
   const server = new McpServer({ name: 'osrs-mcp', version: '0.1.0' });
@@ -39,6 +40,13 @@ export function createServer() {
     inputSchema: { rsn: z.string().default('Uzgorak') }, annotations: { readOnlyHint: true }
   }, async ({ rsn }) => {
     try { return { content: [{ type: 'text', text: JSON.stringify(await getPlayerProfile(rsn)) }] }; }
+    catch (error) { return { isError: true, content: [{ type: 'text', text: String(error) }] }; }
+  });
+  server.registerTool('get_item_info', {
+    description: 'Read attributed Wiki item properties, literal equipment bonuses and utility/requirements context; does not confirm ownership or equip eligibility',
+    inputSchema: { item: z.string().min(1).max(200) }, annotations: { readOnlyHint: true }
+  }, async ({ item }) => {
+    try { return { content: [{ type: 'text', text: JSON.stringify(await getItemInfo(item)) }] }; }
     catch (error) { return { isError: true, content: [{ type: 'text', text: String(error) }] }; }
   });
   return server;
