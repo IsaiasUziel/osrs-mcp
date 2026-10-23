@@ -7,12 +7,12 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 const cwd = fileURLToPath(new URL('..', import.meta.url));
 const preload = ['--preload', './tests/fixtures/hiscores-preload.ts'];
-const toolNames = ['get_player_stats', 'get_skill_progress'];
+const toolNames = ['get_player_stats', 'get_skill_progress', 'get_quest_info'];
 
 async function checkTools(client: Client) {
   const { tools } = await client.listTools();
   expect(tools.map(tool => tool.name)).toEqual(toolNames);
-  expect(tools.map(tool => tool.inputSchema)).toEqual([
+  expect(tools.slice(0, 2).map(tool => tool.inputSchema)).toEqual([
     { type: 'object', properties: { rsn: { type: 'string', default: 'Uzgorak' } }, additionalProperties: false, $schema: 'http://json-schema.org/draft-07/schema#' },
     {
       type: 'object',
@@ -44,6 +44,15 @@ async function checkTools(client: Client) {
   for (const rsn of ['Missing', 'Unavailable', 'invalid!']) {
     expect((await client.callTool({ name: 'get_player_stats', arguments: { rsn } })).isError).toBe(true);
   }
+  const info = await client.callTool({ name: 'get_quest_info', arguments: { quest: 'Synthetic Quest' } });
+  expect(info.isError).not.toBe(true);
+  const infoContent = info.content as { type: 'text'; text: string }[];
+  expect(JSON.parse(infoContent[0]!.text)).toMatchObject({ title: 'Synthetic Quest', rewardedQuestPoints: 3 });
+  expect((await client.callTool({ name: 'get_quest_info', arguments: { quest: 'Missing' } })).isError).toBe(true);
+  const grouped = await client.callTool({ name: 'get_quest_info', arguments: { quest: 'Alternative Quest' } });
+  expect(grouped.isError).not.toBe(true);
+  const groupedContent = grouped.content as { type: 'text'; text: string }[];
+  expect(JSON.parse(groupedContent[0]!.text).skillRequirements).toEqual([]);
 }
 
 describe('stdio MCP', () => {
