@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod/v3';
 import { getPlayerStats, getSkillProgress } from './hiscores.js';
-import { getQuestInfo } from './quests.js';
+import { getQuestInfo, getQuestSkillGaps } from './quests.js';
 
 export function createServer() {
   const server = new McpServer({ name: 'osrs-mcp', version: '0.1.0' });
@@ -24,6 +24,13 @@ export function createServer() {
     inputSchema: { quest: z.string().min(1).max(200) }, annotations: { readOnlyHint: true }
   }, async ({ quest }) => {
     try { return { content: [{ type: 'text', text: JSON.stringify(await getQuestInfo(quest)) }] }; }
+    catch (error) { return { isError: true, content: [{ type: 'text', text: String(error) }] }; }
+  });
+  server.registerTool('get_quest_skill_gaps', {
+    description: 'Compare explicit quest skill requirements with Hiscores base levels and XP; quest eligibility and completion remain unknown',
+    inputSchema: { quest: z.string().min(1).max(200), rsn: z.string().default('Uzgorak') }, annotations: { readOnlyHint: true }
+  }, async ({ quest, rsn }) => {
+    try { return { content: [{ type: 'text', text: JSON.stringify(getQuestSkillGaps(await getQuestInfo(quest), await getPlayerStats(rsn))) }] }; }
     catch (error) { return { isError: true, content: [{ type: 'text', text: String(error) }] }; }
   });
   return server;

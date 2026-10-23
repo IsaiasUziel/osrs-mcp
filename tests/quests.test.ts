@@ -1,6 +1,7 @@
 import { describe, expect, it, mock } from 'bun:test';
-import { getQuestInfo, parseQuestPage } from '../src/quests.js';
+import { getQuestInfo, getQuestSkillGaps, parseQuestPage } from '../src/quests.js';
 import { questResponse } from './fixtures/quest.js';
+import { SKILLS, parseHiscores } from '../src/hiscores.js';
 
 describe('Wiki quest guidance', () => {
   it('preserves quest context, rewards, item guidance and revision attribution', () => {
@@ -22,6 +23,22 @@ describe('Wiki quest guidance', () => {
       { skill: 'Crafting', level: 31, boostable: true, requiredToStart: false },
       { skill: 'Woodcutting', level: 36, boostable: false, requiredToStart: null }
     ]);
+  });
+
+  it('compares only explicit standalone skills and leaves eligibility unknown', () => {
+    const stats = { rsn: 'Uzgorak', source: 'hiscores', fetchedAt: '2026-01-01', skills: parseHiscores(SKILLS.map(name => `1,${name === 'Crafting' ? 40 : 1},0`).join('\n')) };
+    const result = getQuestSkillGaps(parseQuestPage(questResponse), stats);
+    expect(result.eligibility).toBe('unknown');
+    expect(result.questCompletion).toBe('unknown');
+    expect(result.skills.map(skill => [skill.skill, skill.currentLevel, skill.status])).toEqual([
+      ['Crafting', 40, 'met'], ['Woodcutting', 1, 'below_base_level']
+    ]);
+    expect(result.skills[1]?.xpRemaining).toBe(24815);
+    expect(result.skills.some(skill => skill.skill === 'Magic')).toBe(false);
+    expect(result.statsFetchedAt).toBe(stats.fetchedAt);
+    expect(result.uncheckedConditions).toContain('Quest completion and prerequisite quests');
+    const missing = getQuestSkillGaps(parseQuestPage(questResponse), { ...stats, skills: [] });
+    expect(missing.skills.every(skill => skill.status === 'unknown' && skill.xpRemaining === null)).toBe(true);
   });
 
   it.each([
@@ -58,6 +75,7 @@ describe('Wiki quest guidance', () => {
     const quest = parseQuestPage(input);
     expect(quest.skillRequirements).toEqual([]);
     expect(quest.manualRequirements).toEqual([requirements]);
+    expect(getQuestSkillGaps(quest, { rsn: 'Uzgorak', source: 'test', fetchedAt: 'test', skills: [] }).skills).toEqual([]);
   });
 
   it.each([{}, { parse: { ...questResponse.parse, revid: -1 } }, { parse: { ...questResponse.parse, wikitext: 'Not a quest' } }])('rejects malformed and unsupported pages', input => {
