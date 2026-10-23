@@ -21,11 +21,16 @@ export function parseHiscores(csv: string): Skill[] {
   });
 }
 
-export async function getPlayerStats(rsn: string, fetcher: typeof fetch = fetch): Promise<PlayerStats> {
+export function normalizeRsn(rsn: string): string {
   const normalized = rsn.trim();
   if (!normalized || normalized.length > 12 || !/^[a-zA-Z0-9 _-]+$/.test(normalized)) {
     throw new Error('Invalid RSN');
   }
+  return normalized;
+}
+
+export async function getPlayerStats(rsn: string, fetcher: typeof fetch = fetch): Promise<PlayerStats> {
+  const normalized = normalizeRsn(rsn);
   const url = `https://secure.runescape.com/m=hiscore_oldschool/index_lite.ws?player=${encodeURIComponent(normalized)}`;
   const response = await fetcher(url, { signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'osrs-mcp/0.1.0 (personal OSRS assistant)' } });
   if (response.status === 404) throw new Error(`Player not found: ${normalized}`);

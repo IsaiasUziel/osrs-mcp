@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod/v3';
 import { getPlayerStats, getSkillProgress } from './hiscores.js';
 import { getQuestInfo, getQuestSkillGaps } from './quests.js';
+import { getPlayerProfile } from './player-profile.js';
 
 export function createServer() {
   const server = new McpServer({ name: 'osrs-mcp', version: '0.1.0' });
@@ -31,6 +32,13 @@ export function createServer() {
     inputSchema: { quest: z.string().min(1).max(200), rsn: z.string().default('Uzgorak') }, annotations: { readOnlyHint: true }
   }, async ({ quest, rsn }) => {
     try { return { content: [{ type: 'text', text: JSON.stringify(getQuestSkillGaps(await getQuestInfo(quest), await getPlayerStats(rsn))) }] }; }
+    catch (error) { return { isError: true, content: [{ type: 'text', text: String(error) }] }; }
+  });
+  server.registerTool('get_player_profile', {
+    description: 'Read a public Wise Old Man account-type report with source dates; stale, missing or unsupported reports remain unknown and require confirmation',
+    inputSchema: { rsn: z.string().default('Uzgorak') }, annotations: { readOnlyHint: true }
+  }, async ({ rsn }) => {
+    try { return { content: [{ type: 'text', text: JSON.stringify(await getPlayerProfile(rsn)) }] }; }
     catch (error) { return { isError: true, content: [{ type: 'text', text: String(error) }] }; }
   });
   return server;
