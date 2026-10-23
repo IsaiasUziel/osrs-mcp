@@ -1,3 +1,4 @@
+import { itemResponse } from './item.js';
 import { SKILLS } from '../../src/hiscores.js';
 import { alternativeQuestResponse, questResponse } from './quest.js';
 
@@ -14,6 +15,7 @@ globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init
   }
   if (url.origin === 'https://oldschool.runescape.wiki' && url.pathname === '/api.php') {
     if (init?.method !== 'GET' || url.searchParams.get('action') !== 'parse') throw new Error('Expected read-only Wiki parse request');
+    if (url.searchParams.get('page') === 'Synthetic utility hood') return Response.json(itemResponse());
     if (url.searchParams.get('page') === 'Alternative Quest') return Response.json(alternativeQuestResponse);
     return Response.json(url.searchParams.get('page') === 'Missing' ? { error: { code: 'missingtitle' } } : questResponse);
   }
