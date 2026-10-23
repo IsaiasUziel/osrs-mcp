@@ -1,0 +1,38 @@
+{
+  "name": "osrs-mcp",
+  "version": "0.3.0",
+  "description": "Read-only MCP server for Old School RuneScape Hiscores and skill progress.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IsaiasUziel/osrs-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/IsaiasUziel/osrs-mcp/issues"
+  },
+  "homepage": "https://github.com/IsaiasUziel/osrs-mcp#readme",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "dev:http": "bun --watch src/http.ts",
+    "start:http": "bun src/http.ts",
+    "test": "bun test",
+    "typecheck": "tsrs --noEmit",
+    "build": "bun build ./src/index.ts ./src/http.ts --target=bun --outdir=dist",
+    "check": "bun run typecheck && bun test",
+    "typecheck:watch": "tsrs --noEmit --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "tsrs": "0.14.0-ts7.1.0-dev.20260929"
+  }
+}
