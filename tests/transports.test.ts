@@ -7,7 +7,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 const cwd = fileURLToPath(new URL('..', import.meta.url));
 const preload = ['--preload', './tests/fixtures/hiscores-preload.ts'];
-const toolNames = ['get_player_stats', 'get_skill_progress', 'get_quest_info', 'get_quest_skill_gaps', 'get_player_profile', 'get_item_info'];
+const toolNames = ['get_player_stats', 'get_skill_progress', 'get_quest_info', 'get_quest_skill_gaps', 'get_player_profile', 'get_item_info', 'compare_items'];
 
 async function checkTools(client: Client) {
   const { tools } = await client.listTools();
@@ -74,6 +74,21 @@ async function checkTools(client: Client) {
   for (const item of ['Missing', 'Synthetic Quest', 'invalid\n']) {
     expect((await client.callTool({ name: 'get_item_info', arguments: { item } })).isError).toBe(true);
   }
+  for (const rsn of [undefined, 'Other Player']) {
+    const comparison = await client.callTool({ name: 'compare_items', arguments: { item: 'Synthetic utility hood', against: 'Synthetic combat helm', ...(rsn ? { rsn } : {}) } });
+    expect(comparison.isError).not.toBe(true);
+    const content = comparison.content as { type: 'text'; text: string }[];
+    const value = JSON.parse(content[0]!.text);
+    expect(value).toMatchObject({ rsn: rsn ?? 'Uzgorak', sameSlot: true, equipEligibility: 'unknown', ownership: 'unknown', disposalRecommendation: 'unknown' });
+    expect(value.bonuses.find((bonus: { key: string }) => bonus.key === 'str').difference).toBe(3);
+    expect(value.item.contextWikitext).toContain('while carried');
+  }
+  for (const args of [
+    { item: 'Missing', against: 'Synthetic combat helm' },
+    { item: 'Synthetic utility hood', against: 'Missing' },
+    { item: 'Synthetic utility hood', against: 'Synthetic combat helm', rsn: 'Missing' },
+    { item: 'Synthetic utility hood', against: 'Synthetic combat helm', rsn: 'invalid!' }
+  ]) expect((await client.callTool({ name: 'compare_items', arguments: args })).isError).toBe(true);
   for (const [rsn, accountType] of [[undefined, 'regular'], ['Other Player', 'ironman'], ['Missing', 'unknown'], ['Stale', 'unknown']] as const) {
     const profile = await client.callTool({ name: 'get_player_profile', arguments: rsn ? { rsn } : {} });
     expect(profile.isError).not.toBe(true);

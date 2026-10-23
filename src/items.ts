@@ -73,9 +73,14 @@ export function parseItemPage(input: unknown, fetchedAt = new Date().toISOString
   };
 }
 
-export async function getItemInfo(title: string, fetcher: typeof fetch = fetch): Promise<ItemInfo> {
+export function normalizeItemTitle(title: string): string {
   const normalized = title.trim();
   if (!normalized || normalized.length > 200 || /[\x00-\x1f]/.test(title)) throw new Error('Invalid item title');
+  return normalized;
+}
+
+export async function getItemInfo(title: string, fetcher: typeof fetch = fetch): Promise<ItemInfo> {
+  const normalized = normalizeItemTitle(title);
   const url = new URL('https://oldschool.runescape.wiki/api.php');
   url.search = new URLSearchParams({ action: 'parse', format: 'json', formatversion: '2', page: normalized, redirects: '1', prop: 'wikitext|revid|sections' }).toString();
   const response = await fetcher(url.toString(), {
