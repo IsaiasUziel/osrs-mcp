@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { createServer } from 'node:net';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { questSnapshot } from './fixtures/quest-snapshot.js';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -7,7 +11,15 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 const cwd = fileURLToPath(new URL('..', import.meta.url));
 const preload = ['--preload', './tests/fixtures/hiscores-preload.ts'];
-const toolNames = ['get_player_stats', 'get_skill_progress', 'get_quest_info', 'get_quest_skill_gaps', 'get_player_profile', 'get_item_info', 'compare_items'];
+const toolNames = ['get_player_stats', 'get_skill_progress', 'get_quest_info', 'get_quest_skill_gaps', 'get_player_profile', 'get_item_info', 'compare_items', 'get_quest_status'];
+
+const snapshotDirectory = await mkdtemp(join(tmpdir(), 'osrs-status-transports-'));
+for (const rsn of ['Uzgorak', 'Other Player']) {
+  await writeFile(join(snapshotDirectory, `${rsn.toLowerCase().replace(/ /g, '_')}-quest-snapshot.json`), JSON.stringify(questSnapshot(rsn)));
+}
+afterAll(() => rm(snapshotDirectory, { recursive: true, force: true }));
+const childEnvironment = Object.fromEntries(Object.entries(Bun.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
+childEnvironment.OSRS_MCP_PLAYER_DATA_DIR = snapshotDirectory;
 
 async function checkTools(client: Client) {
   const { tools } = await client.listTools();
@@ -89,6 +101,16 @@ async function checkTools(client: Client) {
     { item: 'Synthetic utility hood', against: 'Synthetic combat helm', rsn: 'Missing' },
     { item: 'Synthetic utility hood', against: 'Synthetic combat helm', rsn: 'invalid!' }
   ]) expect((await client.callTool({ name: 'compare_items', arguments: args })).isError).toBe(true);
+  for (const rsn of [undefined, 'Other Player']) {
+    const result = await client.callTool({ name: 'get_quest_status', arguments: { quest: 'Earlier Quest', ...(rsn ? { rsn } : {}) } });
+    expect(result.isError).not.toBe(true);
+    const content = result.content as { type: 'text'; text: string }[];
+    expect(JSON.parse(content[0]!.text)).toMatchObject({ rsn: rsn ?? 'Uzgorak', status: 'completed', basis: 'user_confirmed_inference', verifiedAgainstGameApi: false });
+  }
+  const absent = await client.callTool({ name: 'get_quest_status', arguments: { quest: 'Not Recorded' } });
+  expect(absent.isError).not.toBe(true);
+  expect((absent.content as { text: string }[])[0]!.text).toContain('"status":"unknown"');
+  expect((await client.callTool({ name: 'get_quest_status', arguments: { quest: 'Earlier Quest', rsn: '../secret' } })).isError).toBe(true);
   for (const [rsn, accountType] of [[undefined, 'regular'], ['Other Player', 'ironman'], ['Missing', 'unknown'], ['Stale', 'unknown']] as const) {
     const profile = await client.callTool({ name: 'get_player_profile', arguments: rsn ? { rsn } : {} });
     expect(profile.isError).not.toBe(true);
@@ -101,7 +123,7 @@ describe('stdio MCP', () => {
   it('initializes, lists tools, and preserves tool results and errors', async () => {
     const client = new Client({ name: 'transport-test', version: '1.0.0' });
     try {
-      await client.connect(new StdioClientTransport({ command: process.execPath, args: [...preload, 'src/index.ts'], cwd }));
+      await client.connect(new StdioClientTransport({ command: process.execPath, args: [...preload, 'src/index.ts'], cwd, env: childEnvironment }));
       await checkTools(client);
     } finally {
       await client.close();
@@ -124,7 +146,7 @@ describe('HTTP MCP', () => {
     url = new URL(`http://127.0.0.1:${address.port}/mcp`);
     await new Promise<void>((resolve, reject) => reservation.close(error => error ? reject(error) : resolve()));
     process = Bun.spawn([Bun.which('bun')!, ...preload, 'src/http.ts'], {
-      cwd, env: { ...Bun.env, PORT: String(address.port), MCP_BEARER_TOKEN: token }, stdout: 'ignore', stderr: 'ignore'
+      cwd, env: { ...childEnvironment, PORT: String(address.port), MCP_BEARER_TOKEN: token }, stdout: 'ignore', stderr: 'ignore'
     });
     for (let i = 0; i < 100; i++) {
       if (process.exitCode !== null) throw new Error(`HTTP child exited: ${process.exitCode}`);

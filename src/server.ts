@@ -5,6 +5,7 @@ import { getQuestInfo, getQuestSkillGaps } from './quests.js';
 import { getPlayerProfile } from './player-profile.js';
 import { getItemInfo } from './items.js';
 import { getItemComparison } from './item-comparison.js';
+import { getQuestStatus } from './quest-status.js';
 
 export function createServer() {
   const server = new McpServer({ name: 'osrs-mcp', version: '0.1.0' });
@@ -55,6 +56,13 @@ export function createServer() {
     inputSchema: { item: z.string().min(1).max(200), against: z.string().min(1).max(200), rsn: z.string().default('Uzgorak') }, annotations: { readOnlyHint: true }
   }, async ({ item, against, rsn }) => {
     try { return { content: [{ type: 'text', text: JSON.stringify(await getItemComparison(item, against, rsn)) }] }; }
+    catch (error) { return { isError: true, content: [{ type: 'text', text: String(error) }] }; }
+  });
+  server.registerTool('get_quest_status', {
+    description: 'Read a local manual quest snapshot with explicit user-reported/inferred provenance; not official live game verification, no completion inferred for missing records',
+    inputSchema: { quest: z.string().min(1).max(200), rsn: z.string().default('Uzgorak') }, annotations: { readOnlyHint: true }
+  }, async ({ quest, rsn }) => {
+    try { return { content: [{ type: 'text', text: JSON.stringify(await getQuestStatus(quest, rsn)) }] }; }
     catch (error) { return { isError: true, content: [{ type: 'text', text: String(error) }] }; }
   });
   return server;
