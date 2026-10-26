@@ -7,6 +7,11 @@ const csv = SKILLS.map((_, i) => `-1,${i === 0 ? 100 : 1},${i === 0 ? 1000 : 0}`
 // Only child MCP processes load this fixture; the test runner's fetch stays real.
 globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
   const url = new URL(input instanceof Request ? input.url : String(input));
+  if (url.origin === 'https://sync.runescape.wiki' && url.pathname.startsWith('/runelite/player/')) {
+    if (init?.method !== 'GET' || init.redirect !== 'error') throw new Error('Expected bounded read-only WikiSync lookup');
+    return Response.json({ username: decodeURIComponent(url.pathname.split('/')[3]!), timestamp: new Date().toISOString(),
+      combat_achievements: [4, 8], quests: { 'Composite Quest': 2, 'Provider Quest': 2 } });
+  }
   if (url.origin === 'https://api.wiseoldman.net' && url.pathname.startsWith('/v2/players/')) {
     if (init?.method !== 'GET') throw new Error('Expected read-only player lookup');
     const name = decodeURIComponent(url.pathname.slice('/v2/players/'.length));

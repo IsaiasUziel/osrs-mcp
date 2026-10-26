@@ -11,7 +11,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 const cwd = fileURLToPath(new URL('..', import.meta.url));
 const preload = ['--preload', './tests/fixtures/hiscores-preload.ts'];
-const toolNames = ['get_player_stats', 'get_skill_progress', 'get_quest_info', 'get_quest_skill_gaps', 'get_player_profile', 'get_item_info', 'compare_items', 'get_quest_status'];
+const toolNames = ['get_player_stats', 'get_skill_progress', 'get_quest_info', 'get_quest_skill_gaps', 'get_player_profile', 'get_item_info', 'compare_items', 'get_quest_status', 'get_player_progress', 'refresh_player_snapshot'];
 
 const snapshotDirectory = await mkdtemp(join(tmpdir(), 'osrs-status-transports-'));
 for (const rsn of ['Uzgorak', 'Other Player']) {
@@ -117,6 +117,25 @@ async function checkTools(client: Client) {
     const content = profile.content as { type: 'text'; text: string }[];
     expect(JSON.parse(content[0]!.text)).toMatchObject({ rsn: rsn ?? 'Uzgorak', accountType, confirmationRequired: accountType === 'unknown' });
   }
+  const reader = tools.find(tool => tool.name === 'get_player_progress')!;
+  const refresher = tools.find(tool => tool.name === 'refresh_player_snapshot')!;
+  expect(reader.annotations?.readOnlyHint).toBe(true);
+  expect(refresher.annotations?.readOnlyHint).toBe(false);
+  for (const rsn of [undefined, 'Other Player']) {
+    const args = rsn ? { rsn } : {};
+    const refresh = await client.callTool({ name: 'refresh_player_snapshot', arguments: { ...args, sections: ['combat_achievements', 'quests'] } });
+    expect(refresh.isError).not.toBe(true);
+    const value = JSON.parse((refresh.content as { text: string }[])[0]!.text);
+    expect(['fresh', 'refreshed']).toContain(value.outcome);
+    const progress = await client.callTool({ name: 'get_player_progress', arguments: { ...args, section: 'combat_achievements' } });
+    expect(progress.isError).not.toBe(true);
+    expect(JSON.parse((progress.content as { text: string }[])[0]!.text)).toMatchObject({ rsn: rsn ?? 'Uzgorak', data: [4, 8], maxAgeDays: 3, freshness: 'fresh' });
+    const quests = await client.callTool({ name: 'get_player_progress', arguments: { ...args, section: 'quests' } });
+    expect(JSON.parse((quests.content as { text: string }[])[0]!.text)).toMatchObject({ data: { 'Composite Quest': null } });
+  }
+  expect((await client.callTool({ name: 'refresh_player_snapshot', arguments: { sections: [] } })).isError).toBe(true);
+  expect((await client.callTool({ name: 'get_player_progress', arguments: { section: 'unknown' } })).isError).toBe(true);
+  expect((await client.callTool({ name: 'refresh_player_snapshot', arguments: { rsn: '../secret', sections: ['quests'] } })).isError).toBe(true);
 }
 
 describe('stdio MCP', () => {

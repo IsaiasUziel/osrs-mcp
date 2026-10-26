@@ -1,6 +1,6 @@
 # OSRS MCP
 
-Read-only MCP server for Old School RuneScape, built with **Bun + TypeScript + tsrs**. Default RSN: **Uzgorak**.
+MCP server for Old School RuneScape, built with **Bun + TypeScript + tsrs**. Upstream requests are read-only; an explicit refresh tool can write private local snapshots. Default RSN: **Uzgorak**.
 
 ## Prerequisites
 
@@ -34,6 +34,8 @@ Requests without `Origin` are supported for non-browser MCP clients. When presen
 - `get_player_stats({ rsn?: string })`: live skills, XP and ranks from official Jagex Hiscores.
 - `get_skill_progress({ rsn?: string, skill: string, targetLevel: number })`: XP needed to reach a level from 1–99.
 - `get_quest_status({ quest: string, rsn?: string })`: optional local manual snapshot lookup; observed/user-reported and inferred states are explicitly distinguished from live verification.
+- `get_player_progress({ section, rsn? })`: local-only WikiSync snapshot read for `quests`, `combat_achievements`, or `achievement_diaries`; reports a three-day retrieval lifetime without network calls.
+- `refresh_player_snapshot({ sections, rsn?, force? })`: explicitly fetch and persist selected sections when missing or expired; `force: true` refreshes before expiry.
 - `get_quest_info({ quest: string })`: Wiki quest requirements, recommendations, required items, rewards and available walkthrough context.
 - `get_quest_skill_gaps({ quest: string, rsn?: string })`: compare explicitly parsed quest skill requirements with Hiscores base levels and XP.
 - `compare_items({ item: string, against: string, rsn?: string })`: side-by-side item contexts and bonus differences with public character skills; not equip eligibility or a disposal recommendation.
@@ -44,7 +46,7 @@ The RSN defaults to `Uzgorak`. Each result includes source and fetch timestamp. 
 
 ## Quest guidance
 
-For example, call `get_quest_info({ "quest": "Lost City" })` for preparation context, then `get_quest_skill_gaps({ "quest": "Lost City" })` for base-level comparisons. The tools use anonymous, on-demand GET requests to the public Wiki and existing official Hiscores endpoint. They never install plugins, inspect RuneLite, read game memory or packets, request game credentials, or control gameplay. WikiSync is not queried. No claim of zero ban risk is made.
+For example, call `get_quest_info({ "quest": "Lost City" })` for preparation context, then `get_quest_skill_gaps({ "quest": "Lost City" })` for base-level comparisons. Upstream requests are anonymous, on-demand GETs. The tools never install plugins, inspect RuneLite, read game memory or packets, request game credentials, or control gameplay. Only `refresh_player_snapshot` queries WikiSync. No claim of zero ban risk is made.
 
 Quest text is returned as **wikitext reference data**, with canonical and revision URLs, fetch time, contributor attribution and a content-license link. Only unambiguous standalone `SCP` skill requirements are interpreted. Alternatives, conditional or unsupported markup, prerequisite quests, quest points, boosts, access and inventory remain unverified. Recommended skills are never treated as requirements. `met` means only that a base skill level meets a parsed threshold; **quest eligibility and completion always remain `unknown`**. A missing base level may still be boostable.
 
@@ -76,6 +78,28 @@ Minimal synthetic snapshot (arrays may hold up to 1,000 records each):
 States are `not_started`, `in_progress`, `completed` or `unknown`. Quest-name matching ignores case, underscores and repeated whitespace, but does not guess aliases. Player identity ignores case and treats underscores as spaces; distinct internal spacing is not collapsed. An inferred completion requires both enabled inference and `exhaustiveUnfinishedList: user_confirmed`; excluded keys/names cannot bypass that policy by omitting a key. The reader never infers a new completion just because a quest is absent. Explicit composite overrides take precedence, including incomplete quests with unfinished subquests; conflicting records remain unknown.
 
 Results identify `user_snapshot`, `user_confirmed_inference` or `snapshot_override` provenance and preserve record/observation dates. `recordedAt` is not the capture date; manual data may be stale, and an unknown observation date remains explicit. This does **not** change existing quest-gap eligibility/completion or item-comparison output: use the local status alongside those tools and attribute it to the user snapshot, not to Jagex. Snapshot text is untrusted reference data, not instructions. Bank snapshots, automatic syncing and gameplay actions are not implemented.
+
+## WikiSync snapshots: read locally, refresh explicitly
+
+Ordinary progress queries never fetch or write, even after expiry. Refresh only the sections you need:
+
+```json
+{ "tool": "refresh_player_snapshot", "arguments": { "sections": ["combat_achievements"] } }
+{ "tool": "get_player_progress", "arguments": { "section": "combat_achievements" } }
+```
+
+- **Lifetime:** three days (72 hours) per section, measured from successful retrieval. At the exact expiry the section is stale. Fresh sections are skipped without an upstream request; add `"force": true` to the refresh arguments for an explicit early update.
+- **Scope:** `quests`, `combat_achievements`, and `achievement_diaries`. Refresh accepts one to three distinct sections and makes at most one GET, storing only missing/expired selected sections, or all selected sections when forced. There is no timer, background polling, or automatic retry.
+- **Storage:** `<normalized_rsn>-wikisync-snapshot.json` beside the existing manual snapshot, under `odd/local/` or the owner-configured `OSRS_MCP_PLAYER_DATA_DIR`. Files are private (0600), ignored by Git in the default directory, size-bounded, and atomically replaced. No path or upstream URL can be supplied by a tool caller. Keep configured directories outside Git too.
+- **Manual corrections:** the original `*-quest-snapshot.json` is never written. Explicit `questOverrides` take precedence in quest progress reads; unmatched manual names remain separate rather than guessing aliases, especially for RFD stages. Other screenshot observations remain accessible through the unchanged `get_quest_status`. Invalid manual overrides cause quest data to be withheld rather than silently bypassed.
+- **Failures:** HTTP errors, missing/null or invalid requested sections, identity mismatches, and oversized responses retain the last valid snapshot. Readers report missing/invalid/stale data instead of silently fetching. A refresh reports `fresh`, `refreshed`, `unavailable`, `invalid_response`, `invalid_snapshot`, or `busy`; unsuccessful outcomes are MCP errors. Respect upstream `Retry-After` before requesting another refresh.
+- **Concurrency:** an exclusive per-player `.lock` sidecar serializes refreshes across processes. An active lock returns `busy` without fetching. After a crashed process, the owner must confirm no refresher is running before removing its stale lock; locks are never automatically stolen.
+
+The upstream is [WikiSync's public API](https://github.com/weirdgloop/wikisync-api), populated by the [RuneLite WikiSync plugin](https://github.com/weirdgloop/WikiSync). `STANDARD` is the game-world profile, not proof of a regular/non-ironman account. This is third-party synchronized data, not verified live game state. Enabling the plugin publishes character progress; this server only reads existing public records and does not enable it.
+
+Results keep the retrieval time (`fetchedAt`), expiry (`expiresAt`), and provider response timestamp (`providerResponseAt`) distinct. The upstream timestamp is generated when queried: **it does not establish the last upload time**, so `providerUpdatedAt` remains null. A fresh local cache can still contain old game progress. Quest states use the provider's 0/1/2 codes (not started/in progress/completed), with null for unknown manual overrides. Combat achievements are completed numeric task IDs, not points; absence is relative to the retrieved snapshot and requires a current task catalog for interpretation.
+
+Existing Hiscores, profile, quest-gap, item and manual quest-status tools keep their previous behavior. Reload the MCP connection after installing code changes to discover the new tools.
 
 ## Item facts
 
@@ -127,7 +151,7 @@ The lookup makes one anonymous GET, with a 10-second deadline, a 1 MiB response 
 ## Notes
 
 - Hiscores CSV is positional; validate the skill ordering against the live response whenever Jagex changes it (currently includes Sailing).
-- The server writes no persistent player data. Optional manual quest snapshots are maintained locally by their owner.
+- Ordinary tools do not write player data. Only the explicit WikiSync refresh writes private local snapshots; manual quest snapshots remain owner-maintained and unchanged.
 - GE prices, broader Wiki coverage and production authentication are future milestones. Official live character quest completion remains unavailable; optional manual status uses separate provenance.
 - `tsrs` is the experimental Rust TypeScript compiler used for type checking; Bun handles runtime and bundling.
 

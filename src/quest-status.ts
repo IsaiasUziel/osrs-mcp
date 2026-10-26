@@ -26,7 +26,7 @@ const defaultDirectory = fileURLToPath(new URL('../odd/local/', import.meta.url)
 const playerIdentity = (value: string) => value.trim().replace(/_/g, ' ').toLowerCase();
 const identity = (value: string) => value.trim().replace(/_/g, ' ').replace(/\s+/g, ' ').toLowerCase();
 
-async function readSnapshot(filename: string): Promise<unknown> {
+export async function readSnapshot(filename: string): Promise<unknown> {
   // Fail closed where these POSIX guards are unavailable. Never block on a FIFO.
   if (!constants.O_NOFOLLOW || !constants.O_NONBLOCK) throw new Error('Unsupported file guards');
   const handle = await open(filename, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -43,6 +43,18 @@ async function readSnapshot(filename: string): Promise<unknown> {
     if (size > 1_048_576) throw new Error('Snapshot too large');
     return JSON.parse(buffer.subarray(0, size).toString('utf8'));
   } finally { await handle.close(); }
+}
+
+export async function readManualQuestOverrides(rsn: string, directory: string) {
+  const name = normalizeRsn(rsn);
+  try {
+    const data = snapshotSchema.parse(await readSnapshot(join(directory, `${playerIdentity(name).replace(/ /g, '_')}-quest-snapshot.json`)));
+    if (playerIdentity(data.rsn) !== playerIdentity(name)) throw new Error('Manual snapshot identity mismatch');
+    return data.questOverrides;
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return [];
+    throw new Error('Manual quest overrides are unavailable or invalid');
+  }
 }
 
 export async function getQuestStatus(quest: string, rsn = 'Uzgorak', directory = process.env.OSRS_MCP_PLAYER_DATA_DIR ?? defaultDirectory) {
