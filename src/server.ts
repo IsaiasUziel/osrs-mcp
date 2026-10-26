@@ -6,6 +6,7 @@ import { getPlayerProfile } from './player-profile.js';
 import { getItemInfo } from './items.js';
 import { getItemComparison } from './item-comparison.js';
 import { getQuestStatus } from './quest-status.js';
+import { getPlayerProgress, refreshPlayerSnapshot, SNAPSHOT_SECTIONS } from './player-snapshot.js';
 
 export function createServer() {
   const server = new McpServer({ name: 'osrs-mcp', version: '0.1.0' });
@@ -64,6 +65,23 @@ export function createServer() {
   }, async ({ quest, rsn }) => {
     try { return { content: [{ type: 'text', text: JSON.stringify(await getQuestStatus(quest, rsn)) }] }; }
     catch (error) { return { isError: true, content: [{ type: 'text', text: String(error) }] }; }
+  });
+  server.registerTool('get_player_progress', {
+    description: 'Read a local WikiSync-derived section snapshot only; reports three-day expiry and unknown upstream freshness without network calls. Explicit manual quest overrides take precedence.',
+    inputSchema: { rsn: z.string().default('Uzgorak'), section: z.enum(SNAPSHOT_SECTIONS) }, annotations: { readOnlyHint: true }
+  }, async ({ rsn, section }) => {
+    try { return { content: [{ type: 'text', text: JSON.stringify(await getPlayerProgress(section, rsn)) }] }; }
+    catch (error) { return { isError: true, content: [{ type: 'text', text: String(error) }] }; }
+  });
+  server.registerTool('refresh_player_snapshot', {
+    description: 'Explicitly refresh selected local player snapshot sections from one anonymous WikiSync GET. Skips sections retrieved within three days unless force=true; writes private local snapshots, never game state. No scheduling or retries.',
+    inputSchema: { rsn: z.string().default('Uzgorak'), sections: z.array(z.enum(SNAPSHOT_SECTIONS)).min(1).max(3), force: z.boolean().default(false) },
+    annotations: { readOnlyHint: false, destructiveHint: false }
+  }, async ({ rsn, sections, force }) => {
+    try {
+      const result = await refreshPlayerSnapshot(sections, rsn, force);
+      return { ...(!['fresh', 'refreshed'].includes(result.outcome) ? { isError: true } : {}), content: [{ type: 'text', text: JSON.stringify(result) }] };
+    } catch (error) { return { isError: true, content: [{ type: 'text', text: String(error) }] }; }
   });
   return server;
 }
